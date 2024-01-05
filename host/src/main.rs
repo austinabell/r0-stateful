@@ -32,7 +32,7 @@ fn main() {
 
     loop {
         // Run until sys_pause
-        let session = exec.run().unwrap();
+        let mut session = exec.run().unwrap();
 
         let prover = get_prover_server(&prover_opts_fast()).unwrap();
         let receipt = prover
@@ -52,6 +52,7 @@ fn main() {
             .build()
             .unwrap();
 
+        session.post_image.pc += 4;
         exec = ExecutorImpl::new(env, session.post_image).unwrap();
     }
 }
