@@ -15,20 +15,6 @@ fn prover_opts_fast() -> ProverOpts {
     }
 }
 
-// Don't look at these, just trying to have a readable channel ASAP, sure there is a cleaner way
-struct ReadableChannel(mpsc::Receiver<u8>);
-impl Read for ReadableChannel {
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        for (i, byte) in buf.iter_mut().enumerate() {
-            match self.0.try_recv() {
-                Ok(data) => *byte = data,
-                Err(_) => return Ok(i),
-            }
-        }
-        Ok(buf.len())
-    }
-}
-
 fn main() {
     // Initialize tracing. In order to view logs, run `RUST_LOG=info cargo run`
     tracing_subscriber::fmt()
@@ -37,20 +23,14 @@ fn main() {
 
     let mut input: u32 = 1;
 
-    // Setup mpsc channel to send data to guest
-    let (tx, rx): (Sender<u8>, Receiver<u8>) = mpsc::channel();
     let env = ExecutorEnv::builder()
-        .stdin(ReadableChannel(rx))
+        .write(&input)
+        .unwrap()
         .build()
         .unwrap();
     let mut exec = ExecutorImpl::from_elf(env, TEST_ELF).unwrap();
 
     loop {
-        // Add input to receiver channel
-        for byte in input.to_le_bytes() {
-            tx.send(byte).unwrap();
-        }
-
         // Run until sys_pause
         let session = exec.run().unwrap();
 
@@ -66,8 +46,12 @@ fn main() {
         // TODO this verify doesn't work after the first. Probably need to use the ID from the previous output?
         // receipt.verify(TEST_ID).unwrap();
         input += 1;
-    }
+        let env = ExecutorEnv::builder()
+            .write(&input)
+            .unwrap()
+            .build()
+            .unwrap();
 
-    // The receipt was verified at the end of proving, but the below code is an
-    // example of how someone else could verify this receipt.
+        exec = ExecutorImpl::new(env, session.post_image).unwrap();
+    }
 }
